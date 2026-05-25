@@ -5,7 +5,7 @@ Análisis exploratorio Big Data del dataset AirQualityUCI
 mediante Apache Spark.
 
 Este módulo se utiliza para justificar el uso de Spark como
-tecnología Big Data en el proyecto Smart City Air Quality
+tecnología Big Data en el proyecto.
 """
 
 from pyspark.sql.functions import col
