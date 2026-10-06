@@ -1,25 +1,26 @@
 """
 spark_analysis.py
 -----------------
-Análisis exploratorio Big Data del dataset AirQualityUCI
-mediante Apache Spark.
+Big Data exploratory analysis of the AirQualityUCI dataset
+using Apache Spark.
 
-Este módulo se utiliza para justificar el uso de Spark como
-tecnología Big Data en el proyecto.
+This module demonstrates the use of Spark as a Big Data
+technology in this project.
 """
 
 from pyspark.sql.functions import col
 
+from config.settings import RAW_DATA_PATH
 from spark.spark_session import get_spark_session
 
 
 def main():
 
-    # Inicializar sesión Spark
-    spark = get_spark_session("SmartCity-Spark-Analysis")
+    # Initialize the Spark session
+    spark = get_spark_session("Aerythion-Spark-Analysis")
 
-    # Cargar dataset original (sin preprocesar)
-    input_path = "data/raw/AirQualityUCI.csv"
+    # Load the original, unprocessed dataset
+    input_path = str(RAW_DATA_PATH)
 
     df = (
         spark.read
@@ -29,24 +30,24 @@ def main():
         .csv(input_path)
     )
 
-    print("=== ANÁLISIS EXPLORATORIO CON SPARK ===")
+    print("=== EXPLORATORY ANALYSIS WITH SPARK ===")
 
-    # Información básica
-    print("\nNúmero total de registros:")
+    # Basic information
+    print("\nTotal number of records:")
     print(df.count())
 
-    print("\nEsquema del dataset:")
+    print("\nDataset schema:")
     df.printSchema()
 
-    # Ajustes de nombres de columnas para facilitar análisis con Spark (da errores con los nombres originales)
+    # Rename columns so Spark can process their original punctuation safely.
     df = df \
         .withColumnRenamed("CO(GT)", "CO_GT") \
         .withColumnRenamed("NO2(GT)", "NO2_GT") \
         .withColumnRenamed("NOx(GT)", "NOx_GT") \
         .withColumnRenamed("PT08.S1(CO)", "PT08_S1_CO")
 
-    # Estadísticas descriptivas de variables clave
-    print("\nEstadísticas descriptivas:")
+    # Descriptive statistics for key variables
+    print("\nDescriptive statistics:")
     df.select(
         col("`CO_GT`"),
         col("`NO2_GT`"),
@@ -57,15 +58,15 @@ def main():
         col("`AH`")
     ).describe().show()
 
-    # Análisis temporal básico
-    print("\nNúmero de registros por fecha:")
+    # Basic time-based analysis
+    print("\nNumber of records by date:")
 
     df.groupBy("Date").count().orderBy("Date").show(5)
 
-    # Finalizar Spark
+    # Stop Spark
     spark.stop()
 
-    print("\nAnálisis con Spark finalizado correctamente")
+    print("\nSpark analysis completed successfully")
 
 
 if __name__ == "__main__":

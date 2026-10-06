@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-air_quality}
+      POSTGRES_USER: ${POSTGRES_USER:-air_quality}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-air_quality_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-air_quality} -d ${POSTGRES_DB:-air_quality}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-air_quality}
+      POSTGRES_USER: ${POSTGRES_USER:-air_quality}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-air_quality_dev}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  batch:
+    profiles: ["batch"]
+    build:
+      context: .
+      dockerfile: Dockerfile.pipeline
+    volumes:
+      - ./data:/app/data
+    command: ["--skip-api"]
+
+  simulator:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    environment:
+      SENSOR_API_URL: http://api:8000/api/v1/readings
+      SENSOR_ID: ${SIMULATED_SENSOR_ID:-uci-historical-replay}
+      SIMULATOR_INTERVAL_SECONDS: ${SIMULATOR_INTERVAL_SECONDS:-2}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -1,23 +1,24 @@
 """
 anomaly_detection.py
 --------------------
-Detección de anomalías en sensores ambientales urbanos
-mediante el algoritmo Isolation Forest.
+Anomaly detection for urban environmental sensors
+using the Isolation Forest algorithm.
 
 """
 
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
+from config.settings import OUTPUT_DIR, PROCESSED_DIR
 from ml.evaluation import summarize_anomalies
 
 
 def main():
-    # Cargar dataset preprocesado
-    csv_path = "data/processed/air_quality_clean.csv"
+    # Load the preprocessed dataset
+    csv_path = PROCESSED_DIR / "air_quality_clean.csv"
     df = pd.read_csv(csv_path, sep=";")
 
-    # Selección de variables numéricas
+    # Select numeric features
     feature_columns = [
         "CO_GT",
         "NO2_GT",
@@ -32,11 +33,11 @@ def main():
 
     X = df[feature_columns]
 
-    # Escalado de variables
+    # Scale features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Entrenamiento del modelo
+    # Train the model
     model = IsolationForest(
         n_estimators=100,
         contamination=0.05,
@@ -45,25 +46,25 @@ def main():
 
     df["anomaly"] = model.fit_predict(X_scaled)
     #  1  -> normal
-    # -1  -> anomalía
+    # -1  -> anomaly
 
-    # Evaluación desde archivo de evaluación
+    # Evaluate the anomaly detection results
     summary = summarize_anomalies(df)
 
-    print("Resumen de anomalías")
+    print("Anomaly summary")
     for k, v in summary.items():
         print(f"{k}: {v}")
 
-    # Guardar resultados
+    # Save results
     output_df = df[["timestamp", "anomaly"] + feature_columns]
 
     output_df.to_csv(
-        "data/output/anomaly_detection_results.csv",
+        OUTPUT_DIR / "anomaly_detection_results.csv",
         index=False
     )
 
-    print("Detección de anomalías completada")
-    print("Resultados guardados en data/output/anomaly_detection_results.csv")
+    print("Anomaly detection complete")
+    print(f"Results saved to {OUTPUT_DIR / 'anomaly_detection_results.csv'}")
 
 
 if __name__ == "__main__":

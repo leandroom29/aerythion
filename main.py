@@ -1,92 +1,109 @@
-from ml.regression import main as run_regression
-from ml.clustering import main as run_clustering
+import argparse
+
+import uvicorn
+
+from config.settings import ensure_project_directories, OUTPUT_DIR, PROJECT_CONFIG
 from ml.anomaly_detection import main as run_anomaly_detection
+from ml.clustering import main as run_clustering
+from ml.extra_models import main as run_extra_models
+from ml.regression import main as run_regression
 from spark.spark_analysis import main as run_spark_analysis
 from spark.spark_clustering_prep import main as run_clustering_prep
-from api_server import run_api as run_server
-
-import threading
-import os
 
 
-def check_outputs():
-    """
-    Verifica que los archivos de salida existen antes de lanzar la API
-    """
-    required_files = [
-        "data/output/regression_predictions.csv",
-        "data/output/anomaly_detection_results.csv",
-        "data/output/clustering_results.csv"
-    ]
+REQUIRED_OUTPUTS = [
+    OUTPUT_DIR / "regression_predictions.csv",
+    OUTPUT_DIR / "anomaly_detection_results.csv",
+    OUTPUT_DIR / "clustering_results.csv",
+    OUTPUT_DIR / "gradient_boosting_predictions.csv",
+    OUTPUT_DIR / "dbscan_results.csv",
+]
 
-    for file in required_files:
-        if not os.path.exists(file):
-            print(f"No se encontró {file}")
-            return False
 
-    print("Todos los archivos de salida están presentes.")
-    return True
+def check_outputs(allow_missing: bool = False) -> None:
+    """Check that pipeline outputs exist before serving the API."""
+    missing = [str(path) for path in REQUIRED_OUTPUTS if not path.exists()]
+    if missing:
+        if allow_missing:
+            print("Skipping output validation because ML execution was requested to be skipped.")
+            return
+        raise FileNotFoundError(
+            "Missing pipeline outputs: " + ", ".join(missing)
+        )
+    print("All output files are present.")
 
-def main():
-    try:
-        print("=== PIPELINE SMART CITY ===")
 
-        print("Realizando ajustes y configuración incial...")
-        print("Cargando dataset y realizando análisis exploratorio con Spark...")
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Air quality analysis pipeline")
+    parser.add_argument("--skip-spark", action="store_true", help="Skip exploratory analysis with Spark")
+    parser.add_argument("--skip-clustering-prep", action="store_true", help="Skip clustering dataset preparation")
+    parser.add_argument("--skip-ml", action="store_true", help="Skip the machine-learning models")
+    parser.add_argument("--skip-api", action="store_true", help="Do not start the API when the pipeline finishes")
+    parser.add_argument("--host", default=PROJECT_CONFIG["api"]["host"], help="FastAPI server host")
+    parser.add_argument("--port", type=int, default=PROJECT_CONFIG["api"]["port"], help="FastAPI server port")
+    return parser
+
+
+def run_pipeline(args: argparse.Namespace) -> None:
+    ensure_project_directories()
+    print("=== AERYTHION PIPELINE ===")
+    print("Initial setup complete.")
+
+    if not args.skip_spark:
+        print("Loading dataset and running exploratory analysis with Spark...")
         run_spark_analysis()
+        print("Spark exploratory analysis complete.")
 
-        print("Análisis exploratorio con Spark finalizado.")
-        print("Preparando dataset para clustering...")
+    if not args.skip_clustering_prep:
+        print("Preparing the clustering dataset...")
         run_clustering_prep()
-        print("Dataset preparado para clustering.")
+        print("Clustering dataset prepared.")
 
-        print("Ejecutando pipeline de ML...")
-
+    if not args.skip_ml:
+        print("Running the machine-learning pipeline...")
         print("============================================")
-        print("Realizando modelo de regresión...")
+        print("Running regression model...")
         print("============================================")
         run_regression()
-
-        print("Regresión finalizada.")
+        print("Regression complete.")
 
         print("============================================")
-        print("Realizando modelo de detección de anomalías...")
+        print("Running anomaly detection model...")
         print("============================================")
         run_anomaly_detection()
-
-        print("Detección de anomalías finalizada.")
+        print("Anomaly detection complete.")
 
         print("============================================")
-        print("Realizando modelo de clustering con dataset preprocesado...")
+        print("Running clustering model on the preprocessed dataset...")
         print("============================================")
         run_clustering()
+        print("Clustering complete.")
 
-        print("Clustering finalizado.")
-    
-        print("=================================================================")
-        print("================================================")
-        print("================================\n")
-        print("Pipeline finalizado correctamente\n")
-        print("================================")
-        print("================================================")
-        print("=================================================================")
+        print("Running additional models (Gradient Boosting and DBSCAN)...")
+        run_extra_models()
+        print("Additional models complete.")
 
-        print("Lanzando servidor Flask para visualización de resultados...")
-    
-        api_thread = threading.Thread(target=run_server)
-        api_thread.start()
+    check_outputs(allow_missing=args.skip_ml)
+    print("Pipeline completed successfully.")
 
-        print("Servidor Flask lanzado. Accesos a la API en:")
-        print("   http://127.0.0.1:5000/")
-        print("   http://127.0.0.1:5000/data")
-        print("   http://127.0.0.1:5000/regression")
-        print("   http://127.0.0.1:5000/clustering")
-        print("   http://127.0.0.1:5000/anomalies")
+    if not args.skip_api:
+        print("Starting the FastAPI service and dashboard...")
+        print(f"Dashboard: http://{args.host}:{args.port}/dashboard")
+        print(f"API docs:  http://{args.host}:{args.port}/docs")
+        uvicorn.run("api.main:app", host=args.host, port=args.port, reload=False)
 
-    
-    except Exception as e:
-        print("\nERROR EN EL PIPELINE:")
-        print(e)
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        run_pipeline(args)
+    except Exception as exc:  # pragma: no cover - keep the pipeline output readable
+        print("\nPIPELINE ERROR:")
+        print(exc)
+        raise
+
 
 if __name__ == "__main__":
     main()

@@ -8,15 +8,16 @@ Clustering de patrones ambientales urbanos mediante K-Means.
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+from config.settings import OUTPUT_DIR, PROCESSED_DIR
 from ml.evaluation import summarize_clusters
 
 
 def main():
-    # Cargar dataset preprocesado
-    csv_path = "data/processed/air_quality_clustering.csv"
+    # Load the preprocessed dataset
+    csv_path = PROCESSED_DIR / "air_quality_clustering.csv"
     df = pd.read_csv(csv_path, sep=";")
 
-    # Selección de variables numéricas
+    # Select numeric features
     feature_columns = [
         "CO_GT",
         "NO2_GT",
@@ -31,11 +32,11 @@ def main():
 
     X = df[feature_columns]
 
-    # Escalado de variables
+    # Scale features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Clustering con K-Means
+    # Cluster with K-Means
     kmeans = KMeans(
         n_clusters=3,
         random_state=42,
@@ -44,22 +45,22 @@ def main():
 
     df["cluster"] = kmeans.fit_predict(X_scaled)
 
-    # Evaluación desde archivo de evaluación
+    # Evaluate the clustering results
     cluster_summary = summarize_clusters(df)
 
-    print("Distribución de clusters")
+    print("Cluster distribution")
     for cluster, count in cluster_summary.items():
-        print(f"Cluster {cluster}: {count} muestras")
-    # Guardar resultados
+        print(f"Cluster {cluster}: {count} samples")
+    # Save results
     output_df = df[["timestamp", "cluster"] + feature_columns]
 
     output_df.to_csv(
-        "data/output/clustering_results.csv",
+        OUTPUT_DIR / "clustering_results.csv",
         index=False
     )
 
-    print("Clustering completado con K-Means")
-    print("Resultados guardados en data/output/clustering_results.csv")
+    print("K-Means clustering complete")
+    print(f"Results saved to {OUTPUT_DIR / 'clustering_results.csv'}")
 
 
 if __name__ == "__main__":

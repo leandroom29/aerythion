@@ -1,7 +1,7 @@
 """
 regression.py
 -------------
-Modelo de regresión para la predicción de niveles de contaminación.
+Regression model for predicting pollution levels.
 
 """
 
@@ -12,14 +12,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 
 from ml.evaluation import evaluate_regression
+from config.settings import OUTPUT_DIR, PROCESSED_DIR
 
 
 def main():
-    # Cargar dataset preprocesado
-    csv_path = "data/processed/air_quality_clean.csv"
+    # Load the preprocessed dataset
+    csv_path = PROCESSED_DIR / "air_quality_clean.csv"
     df = pd.read_csv(csv_path, sep=";")
 
-    # Definir variable objetivo
+    # Define the target variable
     target_column = "CO_GT"
 
     feature_columns = [
@@ -36,11 +37,11 @@ def main():
     X = df[feature_columns]
     y = df[target_column]
 
-    # Escalado de variables
+    # Scale features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # División train / test
+    # Split into training and test sets
     X_train, X_test, y_train, y_test = train_test_split(
         X_scaled,
         y,
@@ -48,7 +49,7 @@ def main():
         shuffle=False
     )
 
-    # Entrenamiento del modelo
+    # Train the model
     model = RandomForestRegressor(
         n_estimators=100,
         random_state=42,
@@ -57,27 +58,27 @@ def main():
 
     model.fit(X_train, y_train)
 
-    # Predicción
+    # Generate predictions
     y_pred = model.predict(X_test)
 
-    # Evaluación desde archivo de evaluacion
+    # Evaluate the predictions
     metrics = evaluate_regression(y_test, y_pred)
 
-    print("Evaluación del modelo de regresión")
+    print("Regression model evaluation")
     for name, value in metrics.items():
         print(f"{name}: {value:.4f}")
 
-    # Evaluación del modelo
+    # Calculate model metrics
     rmse = root_mean_squared_error(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
 
-    print("Resultados del modelo de regresión")
+    print("Regression model results")
     print(f"RMSE: {rmse:.4f}")
     print(f"MAE:  {mae:.4f}")
     print(f"R²:   {r2:.4f}")
 
-    # Guardar resultados
+    # Save results
     results = pd.DataFrame({
         "timestamp": df.loc[y_test.index, "timestamp"],
         "real_CO": y_test.values,
@@ -85,11 +86,11 @@ def main():
     })
 
     results.to_csv(
-        "data/output/regression_predictions.csv",
+        OUTPUT_DIR / "regression_predictions.csv",
         index=False
     )
 
-    print("Predicciones guardadas en data/output/regression_predictions.csv")
+    print(f"Predictions saved to {OUTPUT_DIR / 'regression_predictions.csv'}")
 
 
 if __name__ == "__main__":

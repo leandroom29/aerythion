@@ -1,10 +1,11 @@
+from config.settings import PROCESSED_DIR
 from spark.spark_session import get_spark_session
 
 
 def main():
-    spark = get_spark_session("SmartCity-KMeans-Prep")
+    spark = get_spark_session("Aerythion-KMeans-Prep")
 
-    input_path = "data/processed/air_quality_clean.csv"
+    input_path = str(PROCESSED_DIR / "air_quality_clean.csv")
 
     df = (
         spark.read
@@ -14,7 +15,7 @@ def main():
         .csv(input_path)
     )
 
-    # Columnas que usará K-Means
+    # Columns used by K-Means
     clustering_features = [
         "CO_GT",
         "NO2_GT",
@@ -27,22 +28,22 @@ def main():
         "AH"
     ]
 
-    # Eliminar filas con nulos en estas columnas
+    # Drop rows with nulls in these columns
     df_cluster = df.dropna(subset=clustering_features)
 
-    print("Filas originales:", df.count())
-    print("Filas para clustering:", df_cluster.count())
+    print("Original rows:", df.count())
+    print("Rows for clustering:", df_cluster.count())
 
-    # Lo convertimos a Pandas para guardar en CSV
+    # Convert to Pandas to save as CSV
     df_cluster_pandas = df_cluster.toPandas()
     df_cluster_pandas.to_csv(
-        "data/processed/air_quality_clustering.csv",
+        PROCESSED_DIR / "air_quality_clustering.csv",
         index=False,
         sep=";"
     )
 
     spark.stop()
-    print("Dataset para clustering generado correctamente")
+    print("Clustering dataset generated successfully")
 
 
 if __name__ == "__main__":
