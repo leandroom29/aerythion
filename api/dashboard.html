@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Aerythion</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0b1220; --panel: #131e30; --line: #26364d; --text: #e7eef8; --muted: #91a2b9; --cyan: #4bd6c7; --blue: #76a9fa; --red: #fb7185; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(ellipse at top, #15283a, var(--bg) 60%); color: var(--text); font: 15px/1.5 system-ui, sans-serif; min-height: 100vh; }
+    main { max-width: 1180px; margin: auto; padding: 36px 22px 52px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 28px; }
+    h1 { font-size: clamp(1.6rem, 4vw, 2.5rem); margin: 0; letter-spacing: -.04em; }
+    h2 { font-size: 1rem; margin: 0 0 14px; }
+    .eyebrow, .muted { color: var(--muted); }
+    .eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: .72rem; margin-bottom: 6px; }
+    .status { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: .88rem; }
+    .notice { display:none; margin:0 0 16px; padding:12px 15px; border-radius:12px; background:#452f173d; border:1px solid #b7791f88; color:#f6d797; font-size:.9rem; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 16px var(--cyan); }
+    .dot.offline { background: var(--red); box-shadow: 0 0 16px var(--red); }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+    .card { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: 0 14px 45px #0002; }
+    .metric { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -.05em; font-weight: 700; margin-top: 8px; }
+    .label { color: var(--muted); font-size: .85rem; }
+    .layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; margin-top: 14px; }
+    .chart { width: 100%; height: 260px; overflow: visible; }
+    .chart text { fill: var(--muted); font: 11px system-ui; }
+    .legend { display:flex; gap:16px; color:var(--muted); font-size:.8rem; margin-top:10px; }
+    .legend span::before { content:""; display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--cyan); margin-right:7px; }
+    .legend span:nth-child(2)::before { background: var(--blue); }
+    .legend span:nth-child(3)::before { background: #fbbf24; }
+    .feed { display:grid; gap:9px; max-height:250px; overflow:auto; }
+    .reading { display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+    .reading strong { display:block; font-size:.88rem; }
+    .reading small { color:var(--muted); }
+    .empty { color:var(--muted); padding:12px 0; }
+    footer { color: var(--muted); font-size:.8rem; margin-top:18px; }
+    @media (max-width:760px) { .grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .layout { grid-template-columns:1fr; } header { align-items:flex-start; flex-direction:column; } }
+    @media (prefers-reduced-motion:no-preference) { .card { animation: rise .45s ease both; } @keyframes rise { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="eyebrow">Urban air-quality analytics platform</div><h1>Aerythion</h1></div>
+    <div class="status"><span id="status-dot" class="dot"></span><span id="connection">Connecting to live stream…</span></div>
+  </header>
+  <div id="source-notice" class="notice" role="status">Demo mode: historical readings from the UCI dataset are replayed at intervals. They are not current measurements and do not come from a physical sensor. Values come from the preprocessed dataset and are normalized, not expressed in physical units.</div>
+  <section class="grid" aria-label="Key metrics">
+    <article class="card"><div class="label">Historical readings</div><div class="metric" id="count-dataset">—</div></article>
+    <article class="card"><div class="label">Detected anomalies</div><div class="metric" id="count-anomalies">—</div></article>
+    <article class="card"><div class="label">Recent readings</div><div class="metric" id="count-live">0</div></article>
+    <article class="card"><div class="label">Available analysis models</div><div class="metric" id="count-models">—</div></article>
+  </section>
+  <section class="layout">
+    <article class="card">
+      <h2>Normalized CO · history, predictions, and live stream</h2>
+      <svg id="chart" class="chart" viewBox="0 0 800 260" role="img" aria-label="Normalized historical CO, predictions, and replay"></svg>
+      <div class="legend"><span>Historical readings</span><span>Random Forest predictions</span><span>Live sensor readings</span></div>
+    </article>
+    <article class="card">
+      <h2>Sensor activity</h2>
+      <div id="feed" class="feed"><div class="empty">Waiting for readings. Send data to <code>POST /api/v1/readings</code>.</div></div>
+    </article>
+  </section>
+  <footer>The dashboard receives updates every five seconds via Server-Sent Events and stores readings in PostgreSQL. Demo mode replays UCI history; it does not measure current air quality.</footer>
+</main>
+<script>
+  const fmt = value => new Intl.NumberFormat('en-US').format(value || 0);
+  function drawChart(svg, readings, predictions, liveReadings) {
+    const width = 800, height = 250, pad = 28;
+    const series = [
+      {items: readings, value: row => row.CO_GT, color: '#4bd6c7'},
+      {items: predictions, value: row => row.predicted_CO, color: '#76a9fa'},
+      {items: liveReadings, value: row => row.values?.CO_GT, color: '#fbbf24'}
+    ].map(item => ({...item, values: item.items.map(item.value).map(Number).filter(Number.isFinite).slice(-60)}));
+    const all = series.flatMap(item => item.values);
+    if (!all.length) { svg.innerHTML = '<text x="28" y="125">No data to display yet</text>'; return; }
+    const min = Math.min(...all), max = Math.max(...all), range = max - min || 1;
+    const paths = series.map((item, index) => {
+      const values = item.values;
+      if (!values.length) return '';
+      const points = values.map((value, i) => {
+        const x = pad + (values.length === 1 ? 0 : i * (width - pad * 2) / (values.length - 1));
+        const y = height - pad - ((value - min) / range) * (height - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      return `<polyline points="${points}" fill="none" stroke="${item.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }).join('');
+    svg.innerHTML = `<line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="#26364d"/>${paths}<text x="${pad}" y="${height-6}">${min.toFixed(2)}</text><text x="${width-pad-34}" y="${height-6}">${max.toFixed(2)} CO</text>`;
+  }
+  function render(data) {
+    const counts = data.counts || {};
+    document.querySelector('#count-dataset').textContent = fmt(counts.dataset);
+    document.querySelector('#count-anomalies').textContent = fmt(data.anomalies_detected);
+    document.querySelector('#count-live').textContent = fmt(data.live_readings.length);
+    document.querySelector('#count-models').textContent = fmt(Object.values(counts).filter(Boolean).length);
+    const hasReplay = (data.live_readings || []).some(item => item.source_type === 'historical_replay');
+    document.querySelector('#source-notice').style.display = hasReplay ? 'block' : 'none';
+    drawChart(document.querySelector('#chart'), data.readings || [], data.predictions || [], data.live_readings || []);
+    const feed = document.querySelector('#feed');
+    if (!data.live_readings.length) {
+      feed.innerHTML = '<div class="empty">Waiting for readings. Send data to <code>POST /api/v1/readings</code>.</div>';
+    } else {
+      feed.replaceChildren(...data.live_readings.slice(-12).reverse().map(item => {
+        const row = document.createElement('div');
+        row.className = 'reading';
+        const name = document.createElement('div');
+        const time = document.createElement('small');
+        const value = document.createElement('strong');
+        name.textContent = item.sensor_id;
+        const observedAt = item.source_timestamp
+          ? ` · original data: ${new Date(item.source_timestamp).toLocaleString('en-US')}`
+          : '';
+        time.textContent = `${item.source_type === 'historical_replay' ? 'Historical replay' : 'Sensor'} · received ${new Date(item.timestamp).toLocaleString('en-US')}${observedAt}`;
+        value.textContent = Object.entries(item.values).map(([key, number]) => `${key}: ${number}`).join(' · ');
+        name.append(value, time);
+        row.append(name);
+        return row;
+      }));
+    }
+    document.querySelector('#status-dot').classList.remove('offline');
+    document.querySelector('#connection').textContent = `Live · updated ${new Date(data.updated_at).toLocaleTimeString('en-US')}`;
+  }
+  const stream = new EventSource('/api/v1/events');
+  stream.addEventListener('dashboard', event => render(JSON.parse(event.data)));
+  stream.onerror = () => {
+    document.querySelector('#status-dot').classList.add('offline');
+    document.querySelector('#connection').textContent = 'Reconnecting…';
+  };
+</script>
+</body>
+</html>
